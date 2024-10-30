@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -15,14 +16,17 @@ const (
 
 // Конвейер
 func pipeline(input <-chan int, output chan<- int) {
+	log.Println("Запуск конвейера")
 	filterNegative := filterNegativeNumbers(input)
 	filterDiv3 := filterDivisibleBy3(filterNegative)
 	buffer := bufferedStage(filterDiv3, flushInterval)
 
 	for value := range buffer {
+		log.Printf("Конвейер передает значение: %d\n", value)
 		output <- value
 	}
 	close(output)
+	log.Println("Конвейер завершен")
 }
 
 // Фильтрация отрицательных чисел
@@ -31,10 +35,14 @@ func filterNegativeNumbers(input <-chan int) <-chan int {
 	go func() {
 		for value := range input {
 			if value >= 0 {
+				log.Printf("filterNegativeNumbers пропускает положительное значение: %d\n", value)
 				output <- value
+			} else {
+				log.Printf("filterNegativeNumbers отфильтровал отрицательное значение: %d\n", value)
 			}
 		}
 		close(output)
+		log.Println("filterNegativeNumbers завершен")
 	}()
 	return output
 }
@@ -45,10 +53,14 @@ func filterDivisibleBy3(input <-chan int) <-chan int {
 	go func() {
 		for value := range input {
 			if value != 0 && value%3 == 0 {
+				log.Printf("filterDivisibleBy3 пропускает значение: %d\n", value)
 				output <- value
+			} else {
+				log.Printf("filterDivisibleBy3 отфильтровал значение: %d\n", value)
 			}
 		}
 		close(output)
+		log.Println("filterDivisibleBy3 завершен")
 	}()
 	return output
 }
@@ -66,20 +78,23 @@ func bufferedStage(input <-chan int, flushInterval time.Duration) <-chan int {
 			select {
 			case value, ok := <-input:
 				if !ok {
-					// Если входной канал закрыт, опустошаем буфер
+					log.Println("Входной канал закрыт, опустошаем буфер и завершаем bufferedStage")
 					flushBuffer(buffer, output)
 					close(output)
 					return
 				}
 				// Добавляем данные в буфер
+				log.Printf("bufferedStage добавляет значение в буфер: %d\n", value)
 				buffer = append(buffer, value)
 				if len(buffer) >= bufferSize {
+					log.Println("bufferedStage достиг размера буфера, опустошаем буфер")
 					flushBuffer(buffer, output)
 					buffer = buffer[:0]
 				}
 			case <-ticker.C:
 				// Опустошаем буфер по таймеру
 				if len(buffer) > 0 {
+					log.Println("bufferedStage опустошает буфер по таймеру")
 					flushBuffer(buffer, output)
 					buffer = buffer[:0]
 				}
@@ -93,6 +108,7 @@ func bufferedStage(input <-chan int, flushInterval time.Duration) <-chan int {
 // Функция для опустошения буфера
 func flushBuffer(buffer []int, output chan<- int) {
 	for _, value := range buffer {
+		log.Printf("flushBuffer передает значение: %d\n", value)
 		output <- value
 	}
 }
@@ -117,10 +133,12 @@ func inputSource() <-chan int {
 				continue
 			}
 
+			log.Printf("inputSource получил значение: %d\n", value)
 			output <- value
 		}
 
 		close(output)
+		log.Println("inputSource завершен")
 	}()
 	return output
 }
@@ -128,11 +146,17 @@ func inputSource() <-chan int {
 // Потребитель данных
 func consumer(input <-chan int) {
 	for value := range input {
+		log.Printf("consumer получил значение: %d\n", value)
 		fmt.Printf("Получены данные: %d\n", value)
 	}
+	log.Println("consumer завершен")
 }
 
 func main() {
+	// Настройка логгера для вывода в консоль
+	log.SetOutput(os.Stdout)
+	log.Println("Запуск программы")
+
 	// Создаем каналы
 	input := inputSource()
 	output := make(chan int)
@@ -142,4 +166,6 @@ func main() {
 
 	// Запускаем потребителя
 	consumer(output)
+
+	log.Println("Программа завершена")
 }
